@@ -9,7 +9,7 @@ repeat with pl in cleaned_pl
 	
 	set song_info to {}
 	repeat with n from 1 to count of pl_names
-		set song_info to song_info & ((item n of pl_names) & ":::" & (item n of pl_artists))
+		set song_info to song_info & ((item n of pl_names) & " " & (item n of pl_artists))
 	end repeat
 	set {text item delimiters, TID} to {"+++", text item delimiters}
 	set {text item delimiters, song_info_str} to {TID, song_info as text}
@@ -29,6 +29,4 @@ repeat with pl in cleaned_pl
 		
 		display dialog "Error " & errNum & return & return & errMsg buttons {"Cancel"} default button 1
 	end try
-	
 end repeat
-
