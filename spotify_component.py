@@ -100,7 +100,6 @@ class SpotifyExporter:
 
         return all_spotify_playlists
 
-
     def diff_playlists(self, itunes, spotify):
         diff_dict = {}
         for pl_name in itunes.keys():
@@ -217,6 +216,4 @@ class SpotifyExporter:
 
 if __name__ == '__main__':
     se = SpotifyExporter()
-    # se.test_search("i hate u, i love u")
-    # print se.minsec_2_millis("3:53")
     se.run()
