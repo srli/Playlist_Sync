@@ -60,9 +60,10 @@ class SpotifyExporter:
             track = item['track']
 
             song_name = unicodedata.normalize('NFKD', track['name']).encode('ascii','ignore')
-            artist = unicodedata.normalize('NFKD', track['artists'][0]['name']).encode('ascii','ignore')
+            # artist = unicodedata.normalize('NFKD', track['artists'][0]['name']).encode('ascii','ignore')
 
-            song = song_name + " " + artist
+            # song = song_name + " " + artist
+            song = song_name
             try:
                 if "(" in song:
                     s1 = song.split("(")[0]
@@ -110,9 +111,11 @@ class SpotifyExporter:
                 diff_dict[pl_name + "__NEW__"] = itunes_songs
             else:
                 spotify_songs_stripped = [s.replace(" ", "").lower() for s in spotify_songs]
+
                 songs_to_add = []
                 for i, song in enumerate(itunes_songs):
-                    if song.replace(" ", "").lower() not in spotify_songs_stripped:
+                    song_name = song.split(":::")[0]
+                    if song_name.replace(" ", "").lower() not in spotify_songs_stripped:
                         songs_to_add.append(song)
 
                 songs_to_add.append(spotify_songs[-1]) #we track pl ID by last elem of song list
@@ -134,10 +137,19 @@ class SpotifyExporter:
             return 0
 
     def update_spotify(self, playlists):
-        missed_songs = []
+        searched_songs = []
+        passed_songs = [] #songs that have already been previously searched
+
+        try:
+            with open(self.path + "searched_songs.txt", "r") as f:
+                for line in f:
+                    line = line.rstrip()
+                    passed_songs.append(line.split("-- ")[1])
+        except IOError:
+            print "Previously searched songs list is unavailable, using blank entry"
 
         for pl_name in playlists.keys():
-            print "updating playlist " + pl_name
+            print "***updating playlist " + pl_name
 
             if "__NEW__" in pl_name:
                 playlist = self.sp.user_playlist_create(self.username, pl_name.replace("__NEW__", ""))
@@ -149,36 +161,43 @@ class SpotifyExporter:
             song_ids = []
 
             for song in songs:
-                song_name = song.split(":::")[0]
-                song_duration = self.minsec_2_millis(song.split(":::")[1])
-                print "SONG NAME: ", song_name
-                print "SONG DUR: ", song_duration
-                results = self.sp.search(song_name, limit=10, type="track")
-                track = results['tracks']['items']
-                print "GOT TRACKS #: ", len(track)
+                if song in passed_songs:
+                    print "PASSING OVER: ", song
+                    continue
+                try:
+                    song_name = song.split(":::")[0]
+                    song_duration = self.minsec_2_millis(song.split(":::")[1])
+                    print "ADDING: ", song_name
+                    results = self.sp.search(song_name, limit=10, type="track")
+                    track = results['tracks']['items']
 
-                if len(track) == 0: #song not found
-                    missed_songs.append(song)
-                else:
-                    # most_popular = max(t['popularity'] for t in tracks[track[]])
-                    matched_track = next((t for t in track if int(t['duration_ms'])/1000 == song_duration), None)
-                    if matched_track == None:
-                        missed_songs.append(song)
+                    if len(track) == 0: #song not found
+                        searched_songs.append("NOT FOUND-- " + song)
                     else:
-                        song_ids.append(matched_track['id'])
+                        matched_track = next((t for t in track if int(t['duration_ms'])/1000 == song_duration), None)
+                        if matched_track == None:
+                            searched_songs.append("DUR MATCH NONE-- " + song)
+                            song_ids.append(track[0]['id'])
+                        else:
+                            song_ids.append(matched_track['id'])
+                            searched_songs.append("ADDED TO " + pl_name.upper() + "-- " + song)
+                except IndexError:
+                    print "Song name is malformed: ", song
+                    searched_songs.append("MALFORMED-- " +  song)
+                    continue
 
-            print "adding songs to playlist..."
-            print "PL ID: ", pl_id
-            self.sp.user_playlist_add_tracks(self.username, pl_id, song_ids)
-
-        return missed_songs
+            if len(song_ids) > 0:
+                print "adding songs to playlist..."
+                self.sp.user_playlist_add_tracks(self.username, pl_id, song_ids)
+            else:
+                print "no songs to update"
+            print "--------------------\n"
+        return searched_songs
 
     def test_search(self, song):
         results = self.sp.search(song, limit=10, type="track")
         track = results['tracks']['items']
         print "GOT TRACKS: ", len(track)
-        # print "T1: ", track[0]
-        # print "DUR: ", track[0]["duration_ms"]
         matched_track = next(t for t in track if int(t['duration_ms']) == 117054)
         print "MATCHED_TRACK: ", matched_track['id']
 
@@ -190,7 +209,11 @@ class SpotifyExporter:
         spotify_playlists = self.get_spotify_playlists()
         print "calculating diff dict..."
         diff_dict = self.diff_playlists(itunes_playlists, spotify_playlists)
-        missed_songs = self.update_spotify(diff_dict)
+        searched_songs = self.update_spotify(diff_dict)
+        with open(self.path + "searched_songs.txt", 'a') as f:
+            for item in searched_songs:
+                f.write("%s\n" % item)
+        print "done!"
 
 if __name__ == '__main__':
     se = SpotifyExporter()
